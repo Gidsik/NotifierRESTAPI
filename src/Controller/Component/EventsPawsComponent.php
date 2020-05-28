@@ -32,11 +32,13 @@ class EventsPawsComponent extends Component
       if (!isset($createEventData->event_details_json->name)){
         throw new \Exception("name required");
       }
-      if ($createEventData->event_details_json->dateStart >= time()){ //TODO >= switch to <=
-        throw new \Exception("dateStart must be more or equal to NOW");
+      if ($createEventData->event_details_json->dateStart <= time()){
+        $dts = $createEventData->event_details_json->dateStart;
+        $dtn = time();
+        throw new \Exception("dateStart must be more or equal to NOW"." ".$dts." ".$dtn);
       }
       if (isset($createEventData->event_details_json->dateEnd)){
-        if ($createEventData->event_details_json->dateEnd < $createEventData->event_details_json->dateStart){
+        if ($createEventData->event_details_json->dateEnd >= $createEventData->event_details_json->dateStart){
           throw new \Exception("dateEnd must be more or equal to dateStart");
         }
       }
@@ -60,20 +62,20 @@ class EventsPawsComponent extends Component
 
       $status = 0;
 
+      $dates = $this->ZapCalICal->getOccurencesByRRule($event_details->dateStart, $ical_raw, 3);
+      $first = isset($dates[0]) ? $dates[0] : $event_details->dateStart;
+      $second = isset($dates[1]) ? $dates[1] : null;
+
 
       //сохранение объекта в базу
       $this->connection
         ->execute(
           'INSERT INTO `events`
-          (`id`,`name`,`event_details_json`,`ical_raw`)
+          (`id`,`name`,`event_details_json`,`ical_raw`,`first_occurence`,`second_occurence`)
           VALUES
-          (:id,:name,:edj,:ical)', ['id' => $id, 'name' => $name, 'edj' => json_encode($event_details), 'ical' => $ical_raw]
+          (:id,:name,:edj,:ical,:first,:second)',
+          ['id' => $id, 'name' => $name, 'edj' => json_encode($event_details), 'ical' => $ical_raw, 'first' => $first, 'second' => $second]
       );
-
-      //$eventObject = $this->connection
-      //                  ->execute('SELECT `id`,`name`,`event_details_json`,`ical_raw`,`status` from `events` where `id` = :id',['id'=>$id])
-      //                  ->fetchAll('assoc');
-
 
       //формирование объекта на выход
       $eventObject = array('id' => $id, 'name' => $name, 'event_details_json' => $event_details, 'ical_raw' => $ical_raw, 'status' => $status );
@@ -81,7 +83,7 @@ class EventsPawsComponent extends Component
       return $eventObject;
 
     } catch (\Exception $e) {
-      //echo $e;
+      echo $e;
       return null;
     }
   }
@@ -145,7 +147,7 @@ class EventsPawsComponent extends Component
           'name' => $name,
           'event_details_json' => $event_details,
           'ical_raw' => $newIcal,
-          'status' => $eventObject[0]['status'] );
+          'status' => (int)$eventObject[0]['status'] );
         return $eventObject;
       }
     } catch (\Exception $e) {
@@ -170,7 +172,7 @@ class EventsPawsComponent extends Component
         'name' => $eventObject[0]['name'],
         'event_details_json' => json_decode($eventObject[0]['event_details_json']),
         'ical_raw' => $eventObject[0]['ical_raw'],
-        'status' => $eventObject[0]['status'] );
+        'status' => (int)$eventObject[0]['status'] );
     }
     return $eventObject;
   }
@@ -197,8 +199,14 @@ class EventsPawsComponent extends Component
 
   public function getEventNotifications($id): ?array
   {
-    $this->ZapCalICal->getOccurencesByRRule((new \DateTime())->setTimestamp(1588014186), 'FREQ=HOURLY;UNTIL=20260427T190308;INTERVAL=1;BYSECOND=0,3;BYMINUTE=0,1,2,4;BYHOUR=0,5,2;  BYSETPOS=1;BYDAY=SU,MO;BYMONTHDAY=1;BYMONTH=1;WKST=SU');
+    $this->ZapCalICal->getOccurencesByRRule((new \DateTime())->setTimestamp(1609459200),//->setTime(4,2,1)
+    null);
 
+//RRULE:
+//FREQ=MINUTELY;UNTIL=20200427T191948;INTERVAL=1;BYMINUTE=0,1,2,4;BYHOUR=0,5,2;BYDAY=SU,MO;BYMONTHDAY=1;BYYEARDAY=1;BYMONTH=1;BYSETPOS=1;WKST=SU
+//END
+
+//'FREQ=MINUTELY;UNTIL=20220427T190308;INTERVAL=1;BYSECOND=0,3;BYMINUTE=0,1,2,4;BYHOUR=1,5,2;BYMONTHDAY=1;BYMONTH=12'
 
     // TODO: получение массива нотификаций
     return null;

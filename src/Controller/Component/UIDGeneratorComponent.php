@@ -15,12 +15,10 @@ class UIDGeneratorComponent extends Component
   public function initialize(array $config):void
   {
     parent::initialize($config);
-    //someCode
-    //$dsn = 'mysql://root:@localhost/notifierrestapi';
     $this->connection = ConnectionManager::get('default');
   }
 
-  public function getNextID($entity):String
+  public function getNextID($entity):?String
   {
     $lastID = '';
     switch ($entity) {
@@ -37,11 +35,10 @@ class UIDGeneratorComponent extends Component
         break;
 
       default:
-        // code...
+        return null;
         break;
     }
 
-    //$lastID = "6654056524236783617";
     if (isset($lastID[0])){
       $lastID = $lastID[0]['id'];
     }else {

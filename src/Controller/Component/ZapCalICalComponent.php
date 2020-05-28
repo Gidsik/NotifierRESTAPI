@@ -11,6 +11,7 @@ use ZapCalLib\ZDateHelper;
 use Recurr\Rule;
 use Recurr\Transformer\ArrayTransformer;
 use Recurr\Transformer\ArrayTransformerConfig;
+use Cake\Datasource\ConnectionManager;
 
 
 class ZapCalICalComponent extends Component
@@ -18,21 +19,78 @@ class ZapCalICalComponent extends Component
   public function initialize(array $config):void
   {
     parent::initialize($config);
+    $this->connection = ConnectionManager::get('default');
   }
 
-  public function getOccurencesByRRule($dateStart, $rrule): ?array
+  public function getNextNotify($notificationId,$eventId):?string
   {
-    $rule = new Rule($rrule, $dateStart);
+    $DBInfo = $this->connection
+              ->execute('SELECT `notifications`.`id`, `event_id`, `notify_offset`, `notify_time`, `event_details_json`, `ical_raw`
+                  FROM `notifications`
+                  inner join `events` on `events`.`id` = `notifications`.`event_id`
+                  where notifications.`id` = :nid',['nid' => $notificationId])
+              ->fetchAll('assoc');
+
+    $ntDate = date_create_from_format("Y-m-d H:i:s", $DBInfo[0]['notify_time'], new \DateTimeZone("UTC"));
+    $noDate = date_create_from_format("Y-m-d H:i:s", $DBInfo[0]['notify_offset']);
+
+    //echo $DBInfo[0]['notify_time'] . " " . $ntDate->format('Y-m-d H:i:s') . " ". $ntDate->getTimestamp() . "<br>";
+    //echo $DBInfo[0]['notify_offset'] . " " . $noDate->format('Y-m-d H:i:s') . " ". $noDate->getTimestamp() . "<br>";
+    //echo (new \DateTime("now"))->setTimezone(new \DateTimeZone("UTC"))->format('Y-m-d H:i:s') . "<br>";
+
+    //$occurenceTime = strval(date_add($ntDate, (new \DateTime('0000-00-00'))->diff($noDate))->format('Y-m-d H:i:s'));
+    $offset = (new \DateTime('0000-00-00'))->diff($noDate);
+    $occurenceTime = date_add($ntDate, $offset)->getTimestamp();
+
+    $nextOccurenceTime = $this->getOccurencesByRRule($occurenceTime, $DBInfo[0]['ical_raw']);
+
+    echo "$occurenceTime ";
+    print_r($nextOccurenceTime);
+
+    if (count($nextOccurenceTime) < 1){
+      return null;
+    }
+
+    //echo $nextOccurenceTime[1];
+
+    $nextOccurenceTime = date_create_from_format("Y-m-d H:i:s", $nextOccurenceTime[0], new \DateTimeZone("UTC"));
+    $nextNotifyTime = strval(date_sub($nextOccurenceTime, $offset)->format('Y-m-d H:i:s'));
+
+    //echo " " . $nextOccurenceTime->format('Y-m-d H:i:s') . " " . $nextOccurenceTime->getTimestamp() . "<br>";
+    //echo $nextNotifyTime;
+
+    return $nextNotifyTime;
+  }
+
+  public function getOccurencesByRRule($dateStart, $ical, $limit = 200): ?array
+  {
+    // echo "<pre>";
+    // echo $dateStart . "<br>";
+    //$dateStart = ZDateHelper::toiCalDateTime($dateStart)."Z";
+    $eventDateStart = substr($ical, strripos($ical, "DTSTART:")+8, 16);
+    $rrule = stristr(stristr($ical, "FREQ"), "\r\nEND:V", true);
+    //echo $dateStart . "<br>";
+
+    $rule = new Rule($rrule, $eventDateStart);
     $transformer = new ArrayTransformer();
     $transformerConfig = new ArrayTransformerConfig();
     $transformerConfig->enableLastDayOfMonthFix();
-    //$transformerConfig->setVirtualLimit(50);
+    //$transformerConfig->setVirtualLimit($limit);
     $transformer->setConfig($transformerConfig);
 
-    $constraint = new \Recurr\Transformer\Constraint\BeforeConstraint(new \DateTime('2100-08-01 00:00:00'));
-    print_r(($transformer->transform($rule)));
+    $constraint = new \Recurr\Transformer\Constraint\AfterConstraint((new \DateTime())->setTimestamp($dateStart), false);
 
-    return null;
+    $reccol = (($transformer->transform($rule, $constraint))->toArray());
+    $dates = [];
+
+    foreach ($reccol as $key => $value) {
+      $dates[$key] = $value->getStart()->format("Y-m-d H:i:s");
+    }
+
+    //echo $reccol[1]->getStart()->format("Y-m-d H:i:s") . '<br>';
+
+    return $dates;
+    //return null;
   }
 
   public function getRRuleFromObj($eventDetailsData): ?string
@@ -42,11 +100,21 @@ class ZapCalICalComponent extends Component
     }
     $obj = $eventDetailsData->rrule;
     $rule = (new Rule())
-      ->setStartDate($eventDetailsData->dateStart)
-      ->setFreq($obj->freq);
+      ->setStartDate($eventDetailsData->dateStart);
+
+    if($obj->freq != "SECONDLY"){
+      $rule->setFreq($obj->freq);
+    }else {
+      throw new \Exception("SECONDLY freq is unsupported");
+    }
 
     if(isset($obj->until)){       $rule->setUntil((new \DateTime())->setTimestamp($obj->until)); }
-    elseif(isset($obj->count)) {  $rule->setCount($obj->count); }
+    elseif(isset($obj->count)) {
+      /*if($obj->count > 1){*/        $rule->setCount($obj->count); }
+      // else {
+      //   throw new \Exception("COUNT = 1 is unsupported");
+      // }
+    //}
 
     if(isset($eventDetailsData->dateEnd)){
       $rule->setEndDate($eventDetailsData->dateEnd);
@@ -54,12 +122,12 @@ class ZapCalICalComponent extends Component
     if(isset($obj->interval)){    $rule->setInterval($obj->interval); }
     if(isset($obj->wkst)){        $rule->setWeekStart($obj->wkst); }
     if(isset($obj->bysecond)){
-      foreach ($obj->bysecond as $value) {
-        if ($value < 0 || $value > 59){
-          throw new \Exception("bySecond must be 0 to 59");
-        }
-      }
-      $rule->setBySecond($obj->bysecond);
+      //foreach ($obj->bysecond as $value) {
+      //  if ($value < 0 || $value > 59){
+          throw new \Exception("bySecond unsupported");
+      //  }
+      //}
+      //$rule->setBySecond($obj->bysecond);
     }
     if(isset($obj->byminute)){
       foreach ($obj->byminute as $value) {
@@ -129,7 +197,7 @@ class ZapCalICalComponent extends Component
     if(isset($obj->byday)){
       $hasNumber = (preg_match("/\d/", $obj->byday[0]));
       foreach ($obj->byday as $value) {
-        if (!preg_match("/\A((\+|-)?([0-9]){1,2})?((SU)|(MO)|(TU)|(WE)|(TH)|(FR)|(SA))\z/", $value)){ //TODO не смешивать знаковые и не знаковые проверка на вхождение в [-53..-1][1..53]
+        if (!preg_match("/\A((\+|-)?([0-9]){1,2})?((SU)|(MO)|(TU)|(WE)|(TH)|(FR)|(SA))\z/", $value)){
           throw new \Exception("byDay must be [[+/-]n]day");
         }else {
           $num = preg_replace("/\D+/", '', $value);

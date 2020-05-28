@@ -29,6 +29,18 @@ class TestShitController extends AppController
   {
     parent::initialize();
     $this->loadComponent('TestDBThings');
+    $this->loadComponent('NotificatorWorker');
+  }
+
+  function send(...$path): ?Response
+  {
+
+    $this->NotificatorWorker->checkNotifications();
+
+    return $this->response
+            ->withStatus(200,'ok');
+
+
   }
 
   function login(...$path): ?Response

@@ -115,6 +115,12 @@ $routes->scope('/', function (RouteBuilder $builder) {
     ->setPass(['login','pswd'])
     ->setExtensions(['json']);
 
+    $builder->connect(
+      '/api/testShit/send',
+      ['controller' => 'TestShit', 'action' => 'send']
+    )
+    ->setExtensions(['json']);
+
 //------------------------------------------------------------------------------
 //_____________________________TestZapCalController_____________________________
 
@@ -175,7 +181,7 @@ $routes->scope('/', function (RouteBuilder $builder) {
       '/api/notifications/:notificationid',
       ['controller' => 'Notifications', 'action' => 'getNotification']
     )
-    ->setPass(['eventid'])
+    ->setPass(['notificationid'])
     ->setMethods(['GET'])
     ->setExtensions(['json']);
 
@@ -190,7 +196,7 @@ $routes->scope('/', function (RouteBuilder $builder) {
       '/api/notifications/:notificationid',
       ['controller' => 'Notifications', 'action' => 'editNotification']
     )
-    ->setPass(['eventid'])
+    ->setPass(['notificationid'])
     ->setMethods(['PUT'])
     ->setExtensions(['json']);
 
@@ -198,9 +204,31 @@ $routes->scope('/', function (RouteBuilder $builder) {
       '/api/notifications/:notificationid',
       ['controller' => 'Notifications', 'action' => 'deleteNotification']
     )
-    ->setPass(['eventid'])
+    ->setPass(['notificationid'])
     ->setMethods(['DELETE'])
     ->setExtensions(['json']);
+
+//------------------------------------------------------------------------------
+//________________________________PagesController_______________________________
+
+    // $builder->connect(
+    //   '/',
+    //   ['controller' => 'Pages', 'action' => 'display']
+    // );
+    $builder->connect(
+      '/',
+      ['controller' => 'Pages', 'action' => 'index', 'index']
+    );
+
+    $builder->connect(
+      '/docs',
+      ['controller' => 'Pages', 'action' => 'docs', 'html']
+    );
+    // $builder->connect(
+    //   '/pages/*',
+    //   ['controller' => 'Pages', 'action' => 'display']
+    // );
+
 
 //------------------------------------------------------------------------------
 
